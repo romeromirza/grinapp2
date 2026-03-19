@@ -1,0 +1,8 @@
+streamlit
+numpy
+plotly
+pyvista
+vtk
+scipy
+scikit-image
+trimesh
