@@ -6,3 +6,4 @@ vtk
 scipy
 scikit-image
 trimesh
+tqdm
