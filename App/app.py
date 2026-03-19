@@ -626,13 +626,13 @@ with center:
         idx_eps = int(round((pos / 100.0) * max(eps_len - 1, 1)))
         idx_lat = int(round((pos / 100.0) * max(lattice_len - 1, 1)))
 
-        dk_min, dk_max = float(np.min(lens_ready.eps_grid)), float(np.max(lens_ready.eps_grid))
+        dk_min, dk_max = float(np.min(lens_ready.eps_grid_output)), float(np.max(lens_ready.eps_grid_output))
         thick_min, thick_max = float(np.min(lens_ready.thickness_grid)), float(np.max(lens_ready.thickness_grid))
         fill_min, fill_max = float(np.min(lens_ready.density_grid)), float(np.max(lens_ready.density_grid))
 
         p1, p2, p3 = st.columns(3)
         with p1:
-            dk_slice = get_slice(lens_ready.eps_grid, axis, idx_eps)
+            dk_slice = get_slice(lens_ready.eps_grid_output, axis, idx_eps)
             st.plotly_chart(
                 get_cached_slice_fig(
                     lens_id,
