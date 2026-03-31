@@ -373,8 +373,7 @@ class lens():
         self.eps_grid[mask] = eps_vals
         self.eps_grid[~mask] = min_eps
         self.density_grid[mask] = np.clip(utils.get_vf(eps_vals, self.eps_mat), 0.0, 1.0)
-        
-        self.density_grid[~mask] = 0.0
+        self.density_grid[~mask] = np.min(self.density_grid[mask])
 
         
 
