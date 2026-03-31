@@ -171,9 +171,11 @@ class lens():
         self.lattice = np.zeros((self.lattice_px, self.lattice_px, self.__Nz))
         self.__slice_cache = self.__prepare_slice_cache(self.lattice_px, self.lattice_px)
         self.__thickness_lattice = np.empty((self.lattice_px, self.lattice_px, self.__Nz), dtype=np.float64)
+        if self.mask is None:
+            self.mask = np.ones_like(self.thickness_grid)
         for i in range(self.__Nz):
             self.__thickness_lattice[:, :, i] = resize(
-                self.thickness_grid[:, :, i],
+                self.thickness_grid[:, :, i]*self.mask[:, :, i],
                 (self.lattice_px, self.lattice_px),
                 order=1,
                 anti_aliasing=True,
@@ -368,6 +370,7 @@ class lens():
         r = np.sqrt(X**2 + Y**2 + Z**2)
 
         mask = r <= self.__R
+        self.mask = mask
 
         eps_vals = np.maximum(utils.get_lun_eps(r[mask], self.__R, min_eps), 1.0)
         self.eps_grid[mask] = eps_vals
@@ -472,6 +475,7 @@ class lens():
             if self.__thickness_lattice is not None and self.__thickness_lattice.shape[:2] == (Imgx, Imgy):
                 thickness = self.__thickness_lattice[:, :, z_idx_out]
             else:
+              
                 thickness = resize(
                     self.thickness_grid[:, :, z_idx_out],
                     (Imgx, Imgy),
@@ -479,12 +483,15 @@ class lens():
                     anti_aliasing=True,
                     preserve_range=True,
                 )
+              
 
             out = np.zeros((Imgx, Imgy), dtype=np.uint8)
             hit = np.zeros_like(valid)
             hit[valid] = d_valid < thickness[valid]
             out[hit] = 1
+            
             return out
+       
 
         return np.zeros((Imgx, Imgy), dtype=np.uint8)
     
