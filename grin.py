@@ -120,7 +120,7 @@ class lens():
             self.__stepx = 2*self.__R/(self.__Nx-1)
             self.__stepy = 2*self.__R/(self.__Ny-1)
             self.__stepz = 2*self.__R/(self.__Nz-1)
-            self.__make_luneburg_sphere()
+            self.__make_luneburg_sphere(min_eps=1.0)
             self.__construct_thickness()
             self.eps_grid_output = utils.get_eps_from_vf(self.density_grid_output, self.eps_mat)
             min_eps = np.min(self.eps_grid_output[self.eps_grid_output>1])
@@ -371,7 +371,7 @@ class lens():
 
         eps_vals = np.maximum(utils.get_lun_eps(r[mask], self.__R, min_eps), 1.0)
         self.eps_grid[mask] = eps_vals
-        self.eps_grid[~mask] = 1.0
+        self.eps_grid[~mask] = min_eps
         self.density_grid[mask] = np.clip(utils.get_vf(eps_vals, self.eps_mat), 0.0, 1.0)
         
         self.density_grid[~mask] = 0.0
