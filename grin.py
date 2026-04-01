@@ -97,7 +97,7 @@ class lens():
     
     def make(self, shape="luneburg_sphere", 
              out_shape=(101, 101, 101), R=None, X=60.0, Y=60.0, Z=0.0, 
-             custom_eps_func=None, custom_eps_grid=None, eps_func_type="grid", lattice_px=1000, apply_edge_correction=False):
+             custom_eps_func=None, custom_eps_grid=None, eps_func_type="grid", lattice_px=1000, apply_edge_correction=True):
         
         self.__X = X
         self.__Y = Y
