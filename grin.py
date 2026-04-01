@@ -4,6 +4,8 @@ import grin_utils as utils
 from tqdm import tqdm
 from scipy.interpolate import interp1d
 from skimage.transform import resize
+from scipy.ndimage import gaussian_filter
+import cv2 as cv
 
 class lens():
     def __init__(self, lattice="gyroid", eps_mat = 2.4, cell_size = 5.0, grid_size = 64, min_thickness = 0.15,
@@ -94,16 +96,19 @@ class lens():
         self.density_grid_output = f_t2d(self.thickness_grid)
     
     def make(self, shape="luneburg_sphere", 
-             out_shape=(101, 101, 101), R=60.0, X=60.0, Y=60.0, Z=0.0, 
-             custom_eps_func=None, custom_eps_grid=None, eps_func_type="grid", lattice_px=1000):
+             out_shape=(101, 101, 101), R=None, X=60.0, Y=60.0, Z=0.0, 
+             custom_eps_func=None, custom_eps_grid=None, eps_func_type="grid", lattice_px=1000, apply_edge_correction=False):
         
         self.__X = X
         self.__Y = Y
         self.__Z = Z
 
+        if shape=="luneburg_sphere" and R is None:
+            raise Exception("Plase set a radius for Luneburg lens!")
         self.__R = R
 
         self.shape = shape
+        self.mask = None
 
         if len(out_shape) != 3:
             raise Exception("out_shape must be a tuple of 3 integers")
@@ -161,11 +166,18 @@ class lens():
             self.__construct_thickness()
             self.eps_grid_output = utils.get_eps_from_vf(self.density_grid_output, self.eps_mat)
 
+
+        
+        if apply_edge_correction:
+            self.apply_edgecorrection()
+
+
         # Draw lattice for visualization
         if self.__Z > 0:
             zs = np.linspace(0, self.__Z, self.__Nz)
         else:
             zs = np.linspace(0, 2*self.__R, self.__Nz)
+
 
         self.lattice_px = int(lattice_px)
         self.lattice = np.zeros((self.lattice_px, self.lattice_px, self.__Nz))
@@ -374,9 +386,9 @@ class lens():
 
         eps_vals = np.maximum(utils.get_lun_eps(r[mask], self.__R, min_eps), 1.0)
         self.eps_grid[mask] = eps_vals
-        self.eps_grid[~mask] = min_eps
+        self.eps_grid[~mask] = 1.0
         self.density_grid[mask] = np.clip(utils.get_vf(eps_vals, self.eps_mat), 0.0, 1.0)
-        self.density_grid[~mask] = np.min(self.density_grid[mask])
+        self.density_grid[~mask] = 0.0
 
         
 
@@ -496,7 +508,61 @@ class lens():
         return np.zeros((Imgx, Imgy), dtype=np.uint8)
     
 
-    
+    def apply_edgecorrection(self):
+        """Applies a dilation to the 3D grids to prevent edge artifacts when 3D printing.
+        """
+
+        for islice in range(len(self.thickness_grid)):
+        
+            kernel = np.ones((3,3),np.uint8)
+
+            eps = self.eps_grid[:,:,islice].copy()
+            epsoutput = self.eps_grid_output[:,:,islice].copy()
+            thick = self.thickness_grid[:,:,islice].copy()
+            fill = self.density_grid[:,:,islice].copy()
+
+            # inside mesh?
+            inside_mesh_mask = self.eps_grid[:,:,islice]==1
+
+
+            eps_inside = self.eps_grid[:,:,islice].copy()
+            eps_inside[inside_mesh_mask] = 0
+
+            epsoutput_inside = self.eps_grid_output[:,:,islice].copy()
+            epsoutput_inside[inside_mesh_mask] = 0
+
+            thick_inside = self.thickness_grid[:,:,islice].copy()
+            thick_inside[inside_mesh_mask] = 0
+
+            fill_inside = self.density_grid[:,:,islice].copy()
+            fill_inside[inside_mesh_mask] = 0
+
+
+            mask_out = self.eps_grid[:,:,islice].copy()
+            mask_out = mask_out==1
+
+            # apply filters
+            eps_dilation = cv.dilate(eps,kernel,iterations = 1)
+            eps_dilation = gaussian_filter(eps_dilation, 1)
+
+            epsoutput_dilation = cv.dilate(epsoutput,kernel,iterations = 1)
+            epsoutput_dilation = gaussian_filter(epsoutput_dilation, 1)
+
+            thick_dilation = cv.dilate(thick,kernel,iterations = 1)
+            thick_dilation = gaussian_filter(thick_dilation, 1)
+
+            fill_dilation = cv.dilate(fill,kernel,iterations = 1)
+            fill_dilation = gaussian_filter(fill_dilation, 1)
+
+            self.eps_grid[:,:,islice] = eps_dilation*mask_out + eps_inside
+            self.eps_grid_output[:,:,islice] = epsoutput_dilation*mask_out + epsoutput_inside
+            self.thickness_grid[:,:,islice] = thick_dilation*mask_out + thick_inside
+            self.density_grid[:,:,islice] = fill_dilation*mask_out + fill_inside
+
+            
+        
+
+        
 
 
 
