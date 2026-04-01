@@ -584,7 +584,7 @@ with left:
             st.info("Upload a 4-column text grid (x, y, z, Dk) with one header row.")
 
     if out_shape is not None:
-        st.success(f"Output grid will have shape {out_shape[0]}, {out_shape[1]}, {out_shape[2]}.")
+        st.success(f"Output grid will have shape {out_shape[0]}, {out_shape[1]}, {out_shape[2]}. A correction has been auto-applied to edges to prevent printing defects.")
 
     if st.button("Make lens", type="primary"):
         try:
