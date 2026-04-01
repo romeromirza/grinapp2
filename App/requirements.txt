@@ -7,4 +7,4 @@ scipy
 scikit-image
 trimesh
 tqdm
-opencv-python
+opencv-python-headless
