@@ -7,3 +7,4 @@ scipy
 scikit-image
 trimesh
 tqdm
+opencv-python
