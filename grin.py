@@ -514,7 +514,8 @@ class lens():
 
         for islice in range(len(self.thickness_grid)):
         
-            kernel = np.ones((3,3),np.uint8)
+
+            kernel = np.ones((3,3), dtype=np.uint8)
 
             eps = self.eps_grid[:,:,islice].copy()
             epsoutput = self.eps_grid_output[:,:,islice].copy()
