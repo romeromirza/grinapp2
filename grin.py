@@ -6,6 +6,7 @@ from scipy.interpolate import interp1d
 from skimage.transform import resize
 from scipy.ndimage import gaussian_filter
 import cv2 as cv
+from scipy.ndimage import grey_dilation
 
 class lens():
     def __init__(self, lattice="gyroid", eps_mat = 2.4, cell_size = 5.0, grid_size = 64, min_thickness = 0.15,
@@ -99,6 +100,8 @@ class lens():
              out_shape=(101, 101, 101), R=None, X=60.0, Y=60.0, Z=0.0, 
              custom_eps_func=None, custom_eps_grid=None, eps_func_type="grid", lattice_px=1000, apply_edge_correction=True):
         
+        self.apply_edgecorrection_flag =apply_edge_correction
+
         self.__X = X
         self.__Y = Y
         self.__Z = Z
@@ -166,9 +169,17 @@ class lens():
             self.__construct_thickness()
             self.eps_grid_output = utils.get_eps_from_vf(self.density_grid_output, self.eps_mat)
 
-
         
         if apply_edge_correction:
+            # Add edge 3pix padding
+            self.eps_grid = np.pad(self.eps_grid, pad_width=((3,3),(3,3),(3,3)), mode='constant', constant_values=1.0)
+            self.eps_grid_output = np.pad(self.eps_grid_output, pad_width=((3,3),(3,3),(3,3)), mode='constant', constant_values=1.0)
+            self.thickness_grid = np.pad(self.thickness_grid, pad_width=((3,3),(3,3),(3,3)), mode='constant', constant_values=0.0)
+            self.density_grid = np.pad(self.density_grid, pad_width=((3,3),(3,3),(3,3)), mode='constant', constant_values=0.0)
+            self.density_grid_output = np.pad(self.density_grid_output, pad_width=((3,3),(3,3),(3,3)), mode='constant', constant_values=0.0)
+            if self.mask is not None:
+                self.mask = np.pad(self.mask, pad_width=((3,3),(3,3),(3,3)), mode='constant', constant_values=0.0)
+
             self.apply_edgecorrection()
 
 
@@ -200,20 +211,27 @@ class lens():
     
     def write_thickness(self, file_name, origin=None):
 
+        pix_shift = 0
+        if self.apply_edgecorrection_flag:
+            pix_shift = 3
+        distance_shiftx = pix_shift * self.__stepx
+        distance_shifty = pix_shift * self.__stepy
+        distance_shiftz = pix_shift * self.__stepz
+
         if origin == None:
-            origin = (-self.__X/2, -self.__Y/2, -self.__Z/2)
+            origin = (-self.__X/2-distance_shiftx, -self.__Y/2-distance_shifty, -self.__Z/2-distance_shiftz)
         with open(file_name, 'w') as f:
             
             f.write("origin \n")
-            f.write(f"{origin[0]} {origin[1]} {origin[2]} \n")
+            f.write(f"{origin[0]-distance_shiftx} {origin[1]-distance_shifty} {origin[2]-distance_shiftz} \n")
             f.write(f"voxelSize \n")
             f.write(f"{round(self.__stepx, 4)} {round(self.__stepy, 4)} {round(self.__stepz, 4)} \n")
             f.write("grid \n")
             
-            f.write(f"{self.__Nx} {self.__Ny} {self.__Nz} \n")
-            for z in range(self.__Nz):
-                for y in range(self.__Ny):
-                    for x in range(self.__Nx):
+            f.write(f"{self.__Nx+2*pix_shift} {self.__Ny+2*pix_shift} {self.__Nz+2*pix_shift} \n")
+            for z in range(self.__Nz+2*pix_shift):
+                for y in range(self.__Ny+2*pix_shift):
+                    for x in range(self.__Nx+2*pix_shift):
                         thickness = self.thickness_grid[x,y,z]
                         f.write("{:.3f} ".format(thickness))
                     f.write("\n")
@@ -512,53 +530,80 @@ class lens():
         """Applies a dilation to the 3D grids to prevent edge artifacts when 3D printing.
         """
 
-        for islice in range(len(self.thickness_grid)):
+        epsoutput_dilated = grey_dilation(self.eps_grid_output, size=(3,3,3))
+        epsoutput_dilated = gaussian_filter(epsoutput_dilated, 1)
+        epsoutput_dilated[self.eps_grid>1] = self.eps_grid_output[self.eps_grid>1]
+        self.eps_grid_output = epsoutput_dilated
+
+        thick_dilated = grey_dilation(self.thickness_grid, size=(3,3,3))
+        thick_dilated = gaussian_filter(thick_dilated, 1)
+        thick_dilated[self.eps_grid>1] = self.thickness_grid[self.eps_grid>1]
+        self.thickness_grid = thick_dilated
+
+        fill_dilated = grey_dilation(self.density_grid, size=(3,3,3))
+        fill_dilated = gaussian_filter(fill_dilated, 1)
+        fill_dilated[self.eps_grid>1] = self.density_grid[self.eps_grid>1]
+        self.density_grid = fill_dilated
+
+
+        fillout_dilated = grey_dilation(self.density_grid_output, size=(3,3,3))
+        fillout_dilated = gaussian_filter(fillout_dilated, 1)
+        fillout_dilated[self.eps_grid>1] = self.density_grid_output[self.eps_grid>1]
+        self.density_grid_output = fillout_dilated
+
+        eps_dilated = grey_dilation(self.eps_grid, size=(3,3,3))
+        eps_dilated = gaussian_filter(eps_dilated, 1)
+        eps_dilated[self.eps_grid>1] = self.eps_grid[self.eps_grid>1]
+        self.eps_grid = eps_dilated
+
+
+        # for islice in range(len(self.thickness_grid)):
         
 
-            kernel = np.ones((3,3), dtype=np.uint8)
+        #     kernel = np.ones((3,3), dtype=np.uint8)
 
-            eps = self.eps_grid[:,:,islice].copy()
-            epsoutput = self.eps_grid_output[:,:,islice].copy()
-            thick = self.thickness_grid[:,:,islice].copy()
-            fill = self.density_grid[:,:,islice].copy()
+        #     eps = self.eps_grid[:,:,islice].copy()
+        #     epsoutput = self.eps_grid_output[:,:,islice].copy()
+        #     thick = self.thickness_grid[:,:,islice].copy()
+        #     fill = self.density_grid[:,:,islice].copy()
 
-            # inside mesh?
-            inside_mesh_mask = self.eps_grid[:,:,islice]==1
-
-
-            eps_inside = self.eps_grid[:,:,islice].copy()
-            eps_inside[inside_mesh_mask] = 0
-
-            epsoutput_inside = self.eps_grid_output[:,:,islice].copy()
-            epsoutput_inside[inside_mesh_mask] = 0
-
-            thick_inside = self.thickness_grid[:,:,islice].copy()
-            thick_inside[inside_mesh_mask] = 0
-
-            fill_inside = self.density_grid[:,:,islice].copy()
-            fill_inside[inside_mesh_mask] = 0
+        #     # inside mesh?
+        #     inside_mesh_mask = self.eps_grid[:,:,islice]==1
 
 
-            mask_out = self.eps_grid[:,:,islice].copy()
-            mask_out = mask_out==1
+        #     eps_inside = self.eps_grid[:,:,islice].copy()
+        #     eps_inside[inside_mesh_mask] = 0
 
-            # apply filters
-            eps_dilation = cv.dilate(eps,kernel,iterations = 1)
-            eps_dilation = gaussian_filter(eps_dilation, 1)
+        #     epsoutput_inside = self.eps_grid_output[:,:,islice].copy()
+        #     epsoutput_inside[inside_mesh_mask] = 0
 
-            epsoutput_dilation = cv.dilate(epsoutput,kernel,iterations = 1)
-            epsoutput_dilation = gaussian_filter(epsoutput_dilation, 1)
+        #     thick_inside = self.thickness_grid[:,:,islice].copy()
+        #     thick_inside[inside_mesh_mask] = 0
 
-            thick_dilation = cv.dilate(thick,kernel,iterations = 1)
-            thick_dilation = gaussian_filter(thick_dilation, 1)
+        #     fill_inside = self.density_grid[:,:,islice].copy()
+        #     fill_inside[inside_mesh_mask] = 0
 
-            fill_dilation = cv.dilate(fill,kernel,iterations = 1)
-            fill_dilation = gaussian_filter(fill_dilation, 1)
 
-            self.eps_grid[:,:,islice] = eps_dilation*mask_out + eps_inside
-            self.eps_grid_output[:,:,islice] = epsoutput_dilation*mask_out + epsoutput_inside
-            self.thickness_grid[:,:,islice] = thick_dilation*mask_out + thick_inside
-            self.density_grid[:,:,islice] = fill_dilation*mask_out + fill_inside
+        #     mask_out = self.eps_grid[:,:,islice].copy()
+        #     mask_out = mask_out==1
+
+        #     # apply filters
+        #     eps_dilation = cv.dilate(eps,kernel,iterations = 1)
+        #     eps_dilation = gaussian_filter(eps_dilation, 1)
+
+        #     epsoutput_dilation = cv.dilate(epsoutput,kernel,iterations = 1)
+        #     epsoutput_dilation = gaussian_filter(epsoutput_dilation, 1)
+
+        #     thick_dilation = cv.dilate(thick,kernel,iterations = 1)
+        #     thick_dilation = gaussian_filter(thick_dilation, 1)
+
+        #     fill_dilation = cv.dilate(fill,kernel,iterations = 1)
+        #     fill_dilation = gaussian_filter(fill_dilation, 1)
+
+        #     self.eps_grid[:,:,islice] = eps_dilation*mask_out + eps_inside
+        #     self.eps_grid_output[:,:,islice] = epsoutput_dilation*mask_out + epsoutput_inside
+        #     self.thickness_grid[:,:,islice] = thick_dilation*mask_out + thick_inside
+        #     self.density_grid[:,:,islice] = fill_dilation*mask_out + fill_inside
 
             
         
